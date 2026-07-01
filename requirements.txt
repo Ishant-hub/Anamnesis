@@ -1,0 +1,8 @@
+cognee>=1.2.1
+fastapi>=0.116.2
+uvicorn
+sqlalchemy
+pydantic
+python-dotenv
+openai
+fastembed

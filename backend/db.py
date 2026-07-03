@@ -24,6 +24,7 @@ class DBEvent(Base):
     chosen_option = Column(Text, nullable=True)
     rejected_alternatives = Column(Text, nullable=True) # JSON array of objects string
     contradiction_flag = Column(Boolean, default=False)
+    retracted = Column(Boolean, default=False, nullable=True)
     occurred_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -39,3 +40,12 @@ class DBQASession(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    import sqlite3
+    conn = sqlite3.connect("anamnesis.db")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN retracted BOOLEAN DEFAULT 0;")
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()

@@ -81,6 +81,7 @@ def to_event_response(db_event: DBEvent) -> dict:
         "chosen_option": db_event.chosen_option,
         "rejected_alternatives": rejected_alts,
         "contradiction_flag": db_event.contradiction_flag,
+        "retracted": bool(db_event.retracted),
         "occurred_at": db_event.occurred_at,
         "created_at": db_event.created_at
     }
@@ -224,7 +225,7 @@ async def ask_why(req: AskRequest, db: Session = Depends(get_db)):
                 pass
         
         # Build comparison citations (retrieve environment settings or database config)
-        preceding = db.query(DBEvent).filter(DBEvent.occurred_at < decision_event.occurred_at).all()
+        preceding = db.query(DBEvent).filter(DBEvent.occurred_at < decision_event.occurred_at, DBEvent.retracted != True).all()
         env_event = next((e for e in preceding if "environment" in e.summary.lower() or "read env" in e.summary.lower() or "namespace" in e.summary.lower()), None)
         env_citations = [env_event.id] if env_event else []
         
@@ -295,7 +296,7 @@ async def ask_why(req: AskRequest, db: Session = Depends(get_db)):
             print(f"Error calling cognee.recall: {e}")
             
         # 2. SQLite Context Fallback/Expansion
-        all_events = db.query(DBEvent).order_by(DBEvent.occurred_at.asc()).all()
+        all_events = db.query(DBEvent).filter(DBEvent.retracted != True).order_by(DBEvent.occurred_at.asc()).all()
         sqlite_context = "Available Event Logs:\n"
         for idx, e in enumerate(all_events):
             alt_str = ""
@@ -461,6 +462,25 @@ def get_qa_session(qa_id: str, db: Session = Depends(get_db)):
         "comparison_details": comparison_details,
         "created_at": qa.created_at
     }
+
+
+@app.post("/forget/{memory_id}")
+async def forget_memory(memory_id: str, db: Session = Depends(get_db)):
+    event = db.query(DBEvent).filter(DBEvent.id == memory_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Memory not found in SQLite index")
+    
+    event.retracted = True
+    db.commit()
+    
+    import uuid
+    try:
+        await cognee.forget(data_id=uuid.UUID(memory_id))
+    except Exception as e:
+        print(f"Error calling cognee.forget for memory {memory_id}: {e}")
+        pass
+        
+    return {"status": "success", "memory_id": memory_id, "retracted": True}
 
 
 # --- Branch & Replay endpoints ---

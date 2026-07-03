@@ -18,7 +18,8 @@ import {
   CornerDownLeft,
   ChevronRight,
   Check,
-  Share2
+  Share2,
+  EyeOff
 } from "lucide-react";
 
 interface RejectedAlternative {
@@ -39,6 +40,7 @@ interface Event {
   chosen_option?: string;
   rejected_alternatives?: RejectedAlternative[];
   contradiction_flag: boolean;
+  retracted?: boolean;
   occurred_at: string;
   created_at: string;
 }
@@ -189,6 +191,26 @@ export default function Page() {
     navigator.clipboard.writeText(url.toString());
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2000);
+  };
+
+  const handleRetractMemory = async (memoryId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      const res = await fetch(`http://localhost:8000/forget/${memoryId}`, {
+        method: "POST"
+      });
+      if (!res.ok) throw new Error("Failed to retract memory");
+      
+      // Update local events list
+      setEvents(prev => prev.map(e => e.id === memoryId ? { ...e, retracted: true } : e));
+      
+      // Re-trigger the ask-why query to update citations/explanation
+      if (customQuestion && selectedEventId) {
+        await queryAskWhy(customQuestion, selectedEventId);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to retract memory");
+    }
   };
 
   useEffect(() => {
@@ -447,17 +469,20 @@ export default function Page() {
                 const isError = event.event_type === "error";
                 const isSelected = selectedEventId === event.id;
                 const isHighlighted = highlightedEventId === event.id;
+                const isRetracted = event.retracted;
 
                 return (
                   <div 
                     key={event.id}
                     id={`event-${event.id}`}
                     className={`relative p-4 rounded-xl border transition-all duration-500 ${
-                      isHighlighted
-                        ? "bg-yellow-500/10 border-yellow-500/80 shadow-lg shadow-yellow-500/10 scale-[1.02] ring-1 ring-yellow-500/30"
-                        : isSelected 
-                          ? "bg-zinc-900 border-zinc-700 shadow-md shadow-black/40"
-                          : "bg-zinc-900/30 border-zinc-900/80 hover:bg-zinc-900/60 hover:border-zinc-800"
+                      isRetracted
+                        ? "bg-zinc-950/20 border-zinc-900/40 opacity-40 select-none"
+                        : isHighlighted
+                          ? "bg-yellow-500/10 border-yellow-500/80 shadow-lg shadow-yellow-500/10 scale-[1.02] ring-1 ring-yellow-500/30"
+                          : isSelected 
+                            ? "bg-zinc-900 border-zinc-700 shadow-md shadow-black/40"
+                            : "bg-zinc-900/30 border-zinc-900/80 hover:bg-zinc-900/60 hover:border-zinc-800"
                     }`}
                   >
                     {/* Time Dot / Icon */}
@@ -485,7 +510,7 @@ export default function Page() {
                             {event.event_type.replace("_", " ")}
                           </span>
                         </div>
-                        <p className="text-zinc-200 text-sm font-medium leading-relaxed">
+                        <p className={`text-zinc-200 text-sm font-medium leading-relaxed ${isRetracted ? "line-through text-zinc-500" : ""}`}>
                           {event.summary}
                         </p>
                       </div>
@@ -929,17 +954,32 @@ export default function Page() {
                               <div 
                                 key={idx}
                                 onClick={() => handleCiteClick(citeId)}
-                                className="flex items-center justify-between p-3 rounded-lg bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition cursor-pointer group"
+                                className={`flex items-center justify-between p-3 rounded-lg border transition cursor-pointer group ${
+                                  matchedEvent?.retracted
+                                    ? "bg-zinc-950/20 border-zinc-900/40 opacity-40"
+                                    : "bg-zinc-900/30 border-zinc-800 hover:border-zinc-700"
+                                }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="text-xs font-bold text-zinc-400 bg-zinc-850 px-2 py-0.5 rounded font-mono">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className="text-xs font-bold text-zinc-400 bg-zinc-850 px-2 py-0.5 rounded font-mono shrink-0">
                                     {stepIdx ? `Step ${stepIdx}` : `Log`}
                                   </div>
-                                  <span className="text-xs text-zinc-300 font-medium group-hover:text-zinc-100 transition truncate max-w-xs">
+                                  <span className={`text-xs text-zinc-300 font-medium group-hover:text-zinc-100 transition truncate ${matchedEvent?.retracted ? "line-through text-zinc-500" : ""}`}>
                                     {matchedEvent ? matchedEvent.summary : "Recall Node payload"}
                                   </span>
                                 </div>
-                                <ChevronRight className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition" />
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {!matchedEvent?.retracted && matchedEvent && (
+                                    <button
+                                      title="Retract this memory"
+                                      onClick={(e) => handleRetractMemory(matchedEvent.id, e)}
+                                      className="p-1 rounded hover:bg-red-950/40 text-zinc-500 hover:text-red-400 transition cursor-pointer"
+                                    >
+                                      <EyeOff className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <ChevronRight className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition" />
+                                </div>
                               </div>
                             );
                           })}

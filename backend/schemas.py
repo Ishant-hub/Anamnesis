@@ -18,6 +18,7 @@ class EventBase(BaseModel):
     chosen_option: Optional[str] = None
     rejected_alternatives: Optional[List[RejectedAlternative]] = []
     contradiction_flag: bool = False
+    retracted: Optional[bool] = False
     occurred_at: datetime
 
 class EventCreate(EventBase):

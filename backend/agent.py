@@ -28,24 +28,28 @@ SCRIPTED_EVENTS = [
         "event_type": "user_prompt",
         "summary": "User requests deployment of 'payments-service' to production.",
         "confidence": 1.0,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=10)
     },
     {
         "event_type": "memory_read",
         "summary": "Read environment settings for production: environment variables and region config.",
         "confidence": 0.95,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=9)
     },
     {
         "event_type": "memory_write",
         "summary": "Record that the target Kubernetes namespace for payments-service is 'prod-payment-v1'.",
         "confidence": 0.9,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=8)
     },
     {
         "event_type": "memory_read",
         "summary": "Retrieve deployment strategy options for payments-service.",
         "confidence": 0.95,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=7)
     },
     {
@@ -61,6 +65,7 @@ SCRIPTED_EVENTS = [
                 "citing_memory_ids": ["mem-prod-policy-09"]
             }
         ],
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=6)
     },
     # Note: Event 5 is the branch point. Immediately after writing Event 5, we snapshot the Cognee directory.
@@ -68,30 +73,35 @@ SCRIPTED_EVENTS = [
         "event_type": "memory_write",
         "summary": "Overwrite namespace configuration: cluster configuration overridden. Target namespace is 'prod-payment-v2'.",
         "confidence": 1.0,
+        "contradiction_flag": True,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
     },
     {
         "event_type": "tool_call",
         "summary": "Execute Helm upgrade command for payments-service in namespace 'prod-payment-v2'.",
         "confidence": 0.9,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=4)
     },
     {
         "event_type": "error",
         "summary": "Database connection failed during post-deployment health check: payments-db connection timeout.",
         "confidence": 1.0,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=3)
     },
     {
         "event_type": "api_response",
         "summary": "Received replica status from Kubernetes cluster: 0 out of 3 replicas running.",
         "confidence": 0.95,
+        "contradiction_flag": False,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=2)
     },
     {
         "event_type": "final_output",
         "summary": "Deployment failed due to database connection timeout. Initiated automatic Helm rollback.",
         "confidence": 1.0,
+        "contradiction_flag": True,
         "occurred_at": datetime.datetime.utcnow() - datetime.timedelta(minutes=1)
     }
 ]
@@ -159,6 +169,17 @@ async def run_agent():
             os.remove(db_file)
         except Exception as e:
             print(f"Could not remove SQLite file, wiping tables instead: {e}")
+            try:
+                import sqlite3
+                conn = sqlite3.connect(db_file)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM events;")
+                cursor.execute("DELETE FROM qa_sessions;")
+                conn.commit()
+                conn.close()
+                print("SQLite tables wiped successfully.")
+            except Exception as ex:
+                print(f"Error wiping tables: {ex}")
     
     init_db()
     db = SessionLocal()
@@ -172,8 +193,8 @@ async def run_agent():
         step_num = idx + 1
         print(f"\n--- STEP {step_num}: {event_data['event_type']} ---")
         
-        # Check contradiction before writing
-        contradiction = await check_contradiction(db, event_data["summary"])
+        # Use contradiction_flag from SCRIPTED_EVENTS
+        contradiction = event_data["contradiction_flag"]
         
         # Write to SQLite event index
         db_event = DBEvent(
@@ -191,7 +212,7 @@ async def run_agent():
         print(f"Recorded in SQLite Event Index: ID={db_event.id}, Contradiction={db_event.contradiction_flag}")
 
         # Send event text to Cognee.remember
-        cognee_payload = f"Event type: {event_data['event_type']}. Summary: {event_data['summary']}"
+        cognee_payload = f"Event ID: {db_event.id}. Event type: {event_data['event_type']}. Summary: {event_data['summary']}."
         if event_data.get("chosen_option"):
             cognee_payload += f" Chosen Option: {event_data['chosen_option']}."
         if event_data.get("rejected_alternatives"):

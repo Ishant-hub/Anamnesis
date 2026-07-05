@@ -117,7 +117,15 @@ pip install -r requirements.txt
 python -m backend.agent
 
 # 6. Start backend (Terminal 1)
-python -m uvicorn backend.main:app --reload-dir backend --port 8000
+powershell
+
+`.venv\Scripts\python -m uvicorn backend.main:app --reload-dir backend --port 8000`
+
+**What you should see:**
+
+`INFO:     Started server process [5864]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000`
 
 # 7. Start frontend (Terminal 2)
 cd frontend

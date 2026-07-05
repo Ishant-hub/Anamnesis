@@ -15,7 +15,7 @@ dist/
 frontend/.next/
 frontend/node_modules/
 SPEC.md
-anamnesis_prd_workflow_antigravity.md
+anamnesis_prd_workflow.md
 *-shm
 *-wal
 *.lbug

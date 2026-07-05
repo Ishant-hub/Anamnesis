@@ -4,8 +4,6 @@
 
 An observability platform built on Cognee that helps developers debug autonomous AI agents by exposing their decision-making process, the memories that influenced each decision, and the ability to replay decisions with altered memories.
 
-![Anamnesis Timeline](./demo-screenshot.png)
-
 ---
 
 ## The Problem
